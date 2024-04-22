@@ -1,20 +1,19 @@
+import librosa
+import librosa.util as librosa_util
 import math
+import numpy as np
 import os
 import random
 import torch
-from torch import nn
 import torch.nn.functional as F
 import torch.utils.data
-import numpy as np
-import librosa
-import librosa.util as librosa_util
-from librosa.util import normalize, pad_center, tiny
-from scipy.signal import get_window
-from scipy.io.wavfile import read
 from librosa.filters import mel as librosa_mel_fn
+from librosa.util import normalize, pad_center, tiny
+from scipy.io.wavfile import read
+from scipy.signal import get_window
+from torch import nn
 
 MAX_WAV_VALUE = 32768.0
-
 
 def dynamic_range_compression_torch(x, C=1, clip_val=1e-5):
     """
@@ -24,7 +23,6 @@ def dynamic_range_compression_torch(x, C=1, clip_val=1e-5):
     """
     return torch.log(torch.clamp(x, min=clip_val) * C)
 
-
 def dynamic_range_decompression_torch(x, C=1):
     """
     PARAMS
@@ -33,20 +31,16 @@ def dynamic_range_decompression_torch(x, C=1):
     """
     return torch.exp(x) / C
 
-
 def spectral_normalize_torch(magnitudes):
     output = dynamic_range_compression_torch(magnitudes)
     return output
-
 
 def spectral_de_normalize_torch(magnitudes):
     output = dynamic_range_decompression_torch(magnitudes)
     return output
 
-
 mel_basis = {}
 hann_window = {}
-
 
 def spectrogram_torch(y, n_fft, sampling_rate, hop_size, win_size, center=False):
     if torch.min(y) < -1.:
@@ -60,7 +54,7 @@ def spectrogram_torch(y, n_fft, sampling_rate, hop_size, win_size, center=False)
     if wnsize_dtype_device not in hann_window:
         hann_window[wnsize_dtype_device] = torch.hann_window(win_size).to(dtype=y.dtype, device=y.device)
 
-    y = torch.nn.functional.pad(y.unsqueeze(1), (int((n_fft-hop_size)/2), int((n_fft-hop_size)/2)), mode='reflect')
+    y = torch.nn.functional.pad(y.unsqueeze(1), (int((n_fft - hop_size) / 2), int((n_fft - hop_size) / 2)), mode='reflect')
     y = y.squeeze(1)
 
     spec = torch.stft(y, n_fft, hop_length=hop_size, win_length=win_size, window=hann_window[wnsize_dtype_device],
@@ -68,7 +62,6 @@ def spectrogram_torch(y, n_fft, sampling_rate, hop_size, win_size, center=False)
 
     spec = torch.sqrt(spec.pow(2).sum(-1) + 1e-6)
     return spec
-
 
 def spec_to_mel_torch(spec, n_fft, num_mels, sampling_rate, fmin, fmax):
     global mel_basis
@@ -80,7 +73,6 @@ def spec_to_mel_torch(spec, n_fft, num_mels, sampling_rate, fmin, fmax):
     spec = torch.matmul(mel_basis[fmax_dtype_device], spec)
     spec = spectral_normalize_torch(spec)
     return spec
-
 
 def mel_spectrogram_torch(y, n_fft, num_mels, sampling_rate, hop_size, win_size, fmin, fmax, center=False):
     if torch.min(y) < -1.:
@@ -98,7 +90,7 @@ def mel_spectrogram_torch(y, n_fft, num_mels, sampling_rate, hop_size, win_size,
     if wnsize_dtype_device not in hann_window:
         hann_window[wnsize_dtype_device] = torch.hann_window(win_size).to(dtype=y.dtype, device=y.device)
 
-    y = torch.nn.functional.pad(y.unsqueeze(1), (int((n_fft-hop_size)/2), int((n_fft-hop_size)/2)), mode='reflect')
+    y = torch.nn.functional.pad(y.unsqueeze(1), (int((n_fft - hop_size) / 2), int((n_fft - hop_size) / 2)), mode='reflect')
     y = y.squeeze(1)
 
     spec = torch.stft(y, n_fft, hop_length=hop_size, win_length=win_size, window=hann_window[wnsize_dtype_device],

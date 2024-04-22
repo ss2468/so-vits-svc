@@ -2,128 +2,123 @@ import copy
 import math
 import torch
 from torch import nn
+from torch.nn import Conv1d, ConvTranspose1d, AvgPool1d, Conv2d
 from torch.nn import functional as F
+from torch.nn.utils import weight_norm, remove_weight_norm, spectral_norm
 
 import modules.attentions as attentions
 import modules.commons as commons
 import modules.modules as modules
-
-from torch.nn import Conv1d, ConvTranspose1d, AvgPool1d, Conv2d
-from torch.nn.utils import weight_norm, remove_weight_norm, spectral_norm
 from modules.commons import init_weights, get_padding
-from vdecoder.hifigan.models import Generator
 from utils import f0_to_coarse
+from vdecoder.hifigan.models import Generator
 
 class ResidualCouplingBlock(nn.Module):
-  def __init__(self,
-      channels,
-      hidden_channels,
-      kernel_size,
-      dilation_rate,
-      n_layers,
-      n_flows=4,
-      gin_channels=0):
-    super().__init__()
-    self.channels = channels
-    self.hidden_channels = hidden_channels
-    self.kernel_size = kernel_size
-    self.dilation_rate = dilation_rate
-    self.n_layers = n_layers
-    self.n_flows = n_flows
-    self.gin_channels = gin_channels
+    def __init__(self,
+                 channels,
+                 hidden_channels,
+                 kernel_size,
+                 dilation_rate,
+                 n_layers,
+                 n_flows=4,
+                 gin_channels=0):
+        super().__init__()
+        self.channels = channels
+        self.hidden_channels = hidden_channels
+        self.kernel_size = kernel_size
+        self.dilation_rate = dilation_rate
+        self.n_layers = n_layers
+        self.n_flows = n_flows
+        self.gin_channels = gin_channels
 
-    self.flows = nn.ModuleList()
-    for i in range(n_flows):
-      self.flows.append(modules.ResidualCouplingLayer(channels, hidden_channels, kernel_size, dilation_rate, n_layers, gin_channels=gin_channels, mean_only=True))
-      self.flows.append(modules.Flip())
+        self.flows = nn.ModuleList()
+        for i in range(n_flows):
+            self.flows.append(modules.ResidualCouplingLayer(channels, hidden_channels, kernel_size, dilation_rate, n_layers, gin_channels=gin_channels, mean_only=True))
+            self.flows.append(modules.Flip())
 
-  def forward(self, x, x_mask, g=None, reverse=False):
-    if not reverse:
-      for flow in self.flows:
-        x, _ = flow(x, x_mask, g=g, reverse=reverse)
-    else:
-      for flow in reversed(self.flows):
-        x = flow(x, x_mask, g=g, reverse=reverse)
-    return x
-
+    def forward(self, x, x_mask, g=None, reverse=False):
+        if not reverse:
+            for flow in self.flows:
+                x, _ = flow(x, x_mask, g=g, reverse=reverse)
+        else:
+            for flow in reversed(self.flows):
+                x = flow(x, x_mask, g=g, reverse=reverse)
+        return x
 
 class Encoder(nn.Module):
-  def __init__(self,
-      in_channels,
-      out_channels,
-      hidden_channels,
-      kernel_size,
-      dilation_rate,
-      n_layers,
-      gin_channels=0):
-    super().__init__()
-    self.in_channels = in_channels
-    self.out_channels = out_channels
-    self.hidden_channels = hidden_channels
-    self.kernel_size = kernel_size
-    self.dilation_rate = dilation_rate
-    self.n_layers = n_layers
-    self.gin_channels = gin_channels
+    def __init__(self,
+                 in_channels,
+                 out_channels,
+                 hidden_channels,
+                 kernel_size,
+                 dilation_rate,
+                 n_layers,
+                 gin_channels=0):
+        super().__init__()
+        self.in_channels = in_channels
+        self.out_channels = out_channels
+        self.hidden_channels = hidden_channels
+        self.kernel_size = kernel_size
+        self.dilation_rate = dilation_rate
+        self.n_layers = n_layers
+        self.gin_channels = gin_channels
 
-    self.pre = nn.Conv1d(in_channels, hidden_channels, 1)
-    self.enc = modules.WN(hidden_channels, kernel_size, dilation_rate, n_layers, gin_channels=gin_channels)
-    self.proj = nn.Conv1d(hidden_channels, out_channels * 2, 1)
+        self.pre = nn.Conv1d(in_channels, hidden_channels, 1)
+        self.enc = modules.WN(hidden_channels, kernel_size, dilation_rate, n_layers, gin_channels=gin_channels)
+        self.proj = nn.Conv1d(hidden_channels, out_channels * 2, 1)
 
-  def forward(self, x, x_lengths, g=None):
-    # print(x.shape,x_lengths.shape)
-    x_mask = torch.unsqueeze(commons.sequence_mask(x_lengths, x.size(2)), 1).to(x.dtype)
-    x = self.pre(x) * x_mask
-    x = self.enc(x, x_mask, g=g)
-    stats = self.proj(x) * x_mask
-    m, logs = torch.split(stats, self.out_channels, dim=1)
-    z = (m + torch.randn_like(m) * torch.exp(logs)) * x_mask
-    return z, m, logs, x_mask
-
+    def forward(self, x, x_lengths, g=None):
+        # print(x.shape,x_lengths.shape)
+        x_mask = torch.unsqueeze(commons.sequence_mask(x_lengths, x.size(2)), 1).to(x.dtype)
+        x = self.pre(x) * x_mask
+        x = self.enc(x, x_mask, g=g)
+        stats = self.proj(x) * x_mask
+        m, logs = torch.split(stats, self.out_channels, dim=1)
+        z = (m + torch.randn_like(m) * torch.exp(logs)) * x_mask
+        return z, m, logs, x_mask
 
 class TextEncoder(nn.Module):
-  def __init__(self,
-      in_channels,
-      out_channels,
-      hidden_channels,
-      kernel_size,
-      dilation_rate,
-      n_layers,
-      gin_channels=0,
-      filter_channels=None,
-      n_heads=None,
-      p_dropout=None):
-    super().__init__()
-    self.in_channels = in_channels
-    self.out_channels = out_channels
-    self.hidden_channels = hidden_channels
-    self.kernel_size = kernel_size
-    self.dilation_rate = dilation_rate
-    self.n_layers = n_layers
-    self.gin_channels = gin_channels
-    self.pre = nn.Conv1d(in_channels, hidden_channels, 1)
-    self.proj = nn.Conv1d(hidden_channels, out_channels * 2, 1)
-    self.f0_emb = nn.Embedding(256, hidden_channels)
+    def __init__(self,
+                 in_channels,
+                 out_channels,
+                 hidden_channels,
+                 kernel_size,
+                 dilation_rate,
+                 n_layers,
+                 gin_channels=0,
+                 filter_channels=None,
+                 n_heads=None,
+                 p_dropout=None):
+        super().__init__()
+        self.in_channels = in_channels
+        self.out_channels = out_channels
+        self.hidden_channels = hidden_channels
+        self.kernel_size = kernel_size
+        self.dilation_rate = dilation_rate
+        self.n_layers = n_layers
+        self.gin_channels = gin_channels
+        self.pre = nn.Conv1d(in_channels, hidden_channels, 1)
+        self.proj = nn.Conv1d(hidden_channels, out_channels * 2, 1)
+        self.f0_emb = nn.Embedding(256, hidden_channels)
 
-    self.enc_ =  attentions.Encoder(
-        hidden_channels,
-        filter_channels,
-        n_heads,
-        n_layers,
-        kernel_size,
-        p_dropout)
+        self.enc_ = attentions.Encoder(
+            hidden_channels,
+            filter_channels,
+            n_heads,
+            n_layers,
+            kernel_size,
+            p_dropout)
 
-  def forward(self, x, x_lengths, f0=None):
-    x_mask = torch.unsqueeze(commons.sequence_mask(x_lengths, x.size(2)), 1).to(x.dtype)
-    x = self.pre(x) * x_mask
-    x = x + self.f0_emb(f0.long()).transpose(1,2)
-    x = self.enc_(x * x_mask, x_mask)
-    stats = self.proj(x) * x_mask
-    m, logs = torch.split(stats, self.out_channels, dim=1)
-    z = (m + torch.randn_like(m) * torch.exp(logs)) * x_mask
+    def forward(self, x, x_lengths, f0=None):
+        x_mask = torch.unsqueeze(commons.sequence_mask(x_lengths, x.size(2)), 1).to(x.dtype)
+        x = self.pre(x) * x_mask
+        x = x + self.f0_emb(f0.long()).transpose(1, 2)
+        x = self.enc_(x * x_mask, x_mask)
+        stats = self.proj(x) * x_mask
+        m, logs = torch.split(stats, self.out_channels, dim=1)
+        z = (m + torch.randn_like(m) * torch.exp(logs)) * x_mask
 
-    return z, m, logs, x_mask
-
-
+        return z, m, logs, x_mask
 
 class DiscriminatorP(torch.nn.Module):
     def __init__(self, period, kernel_size=5, stride=3, use_spectral_norm=False):
@@ -145,7 +140,7 @@ class DiscriminatorP(torch.nn.Module):
 
         # 1d to 2d
         b, c, t = x.shape
-        if t % self.period != 0: # pad first
+        if t % self.period != 0:  # pad first
             n_pad = self.period - (t % self.period)
             x = F.pad(x, (0, n_pad), "reflect")
             t = t + n_pad
@@ -160,7 +155,6 @@ class DiscriminatorP(torch.nn.Module):
         x = torch.flatten(x, 1, -1)
 
         return x, fmap
-
 
 class DiscriminatorS(torch.nn.Module):
     def __init__(self, use_spectral_norm=False):
@@ -189,11 +183,10 @@ class DiscriminatorS(torch.nn.Module):
 
         return x, fmap
 
-
 class MultiPeriodDiscriminator(torch.nn.Module):
     def __init__(self, use_spectral_norm=False):
         super(MultiPeriodDiscriminator, self).__init__()
-        periods = [2,3,5,7,11]
+        periods = [2, 3, 5, 7, 11]
 
         discs = [DiscriminatorS(use_spectral_norm=use_spectral_norm)]
         discs = discs + [DiscriminatorP(i, use_spectral_norm=use_spectral_norm) for i in periods]
@@ -213,8 +206,7 @@ class MultiPeriodDiscriminator(torch.nn.Module):
             fmap_gs.append(fmap_g)
 
         return y_d_rs, y_d_gs, fmap_rs, fmap_gs
-        
-        
+
 class SpeakerEncoder(torch.nn.Module):
     def __init__(self, mel_n_channels=80, model_num_layers=3, model_hidden_size=256, model_embedding_size=256):
         super(SpeakerEncoder, self).__init__()
@@ -227,102 +219,99 @@ class SpeakerEncoder(torch.nn.Module):
         _, (hidden, _) = self.lstm(mels)
         embeds_raw = self.relu(self.linear(hidden[-1]))
         return embeds_raw / torch.norm(embeds_raw, dim=1, keepdim=True)
-        
+
     def compute_partial_slices(self, total_frames, partial_frames, partial_hop):
         mel_slices = []
-        for i in range(0, total_frames-partial_frames, partial_hop):
-            mel_range = torch.arange(i, i+partial_frames)
+        for i in range(0, total_frames - partial_frames, partial_hop):
+            mel_range = torch.arange(i, i + partial_frames)
             mel_slices.append(mel_range)
-            
+
         return mel_slices
-    
+
     def embed_utterance(self, mel, partial_frames=128, partial_hop=64):
         mel_len = mel.size(1)
-        last_mel = mel[:,-partial_frames:]
-        
+        last_mel = mel[:, -partial_frames:]
+
         if mel_len > partial_frames:
             mel_slices = self.compute_partial_slices(mel_len, partial_frames, partial_hop)
-            mels = list(mel[:,s] for s in mel_slices)
+            mels = list(mel[:, s] for s in mel_slices)
             mels.append(last_mel)
             mels = torch.stack(tuple(mels), 0).squeeze(1)
-        
+
             with torch.no_grad():
                 partial_embeds = self(mels)
             embed = torch.mean(partial_embeds, axis=0).unsqueeze(0)
-            #embed = embed / torch.linalg.norm(embed, 2)
+            # embed = embed / torch.linalg.norm(embed, 2)
         else:
             with torch.no_grad():
                 embed = self(last_mel)
-        
+
         return embed
 
-
 class SynthesizerTrn(nn.Module):
-  """
-  Synthesizer for Training
-  """
+    """
+    Synthesizer for Training
+    """
 
-  def __init__(self, 
-    spec_channels,
-    segment_size,
-    inter_channels,
-    hidden_channels,
-    filter_channels,
-    n_heads,
-    n_layers,
-    kernel_size,
-    p_dropout,
-    resblock, 
-    resblock_kernel_sizes, 
-    resblock_dilation_sizes, 
-    upsample_rates, 
-    upsample_initial_channel, 
-    upsample_kernel_sizes,
-    gin_channels,
-    ssl_dim,
-    n_speakers,
-    **kwargs):
+    def __init__(self,
+                 spec_channels,
+                 segment_size,
+                 inter_channels,
+                 hidden_channels,
+                 filter_channels,
+                 n_heads,
+                 n_layers,
+                 kernel_size,
+                 p_dropout,
+                 resblock,
+                 resblock_kernel_sizes,
+                 resblock_dilation_sizes,
+                 upsample_rates,
+                 upsample_initial_channel,
+                 upsample_kernel_sizes,
+                 gin_channels,
+                 ssl_dim,
+                 n_speakers,
+                 **kwargs):
+        super().__init__()
+        self.spec_channels = spec_channels
+        self.inter_channels = inter_channels
+        self.hidden_channels = hidden_channels
+        self.filter_channels = filter_channels
+        self.n_heads = n_heads
+        self.n_layers = n_layers
+        self.kernel_size = kernel_size
+        self.p_dropout = p_dropout
+        self.resblock = resblock
+        self.resblock_kernel_sizes = resblock_kernel_sizes
+        self.resblock_dilation_sizes = resblock_dilation_sizes
+        self.upsample_rates = upsample_rates
+        self.upsample_initial_channel = upsample_initial_channel
+        self.upsample_kernel_sizes = upsample_kernel_sizes
+        self.segment_size = segment_size
+        self.gin_channels = gin_channels
+        self.ssl_dim = ssl_dim
+        self.emb_g = nn.Embedding(n_speakers, gin_channels)
 
-    super().__init__()
-    self.spec_channels = spec_channels
-    self.inter_channels = inter_channels
-    self.hidden_channels = hidden_channels
-    self.filter_channels = filter_channels
-    self.n_heads = n_heads
-    self.n_layers = n_layers
-    self.kernel_size = kernel_size
-    self.p_dropout = p_dropout
-    self.resblock = resblock
-    self.resblock_kernel_sizes = resblock_kernel_sizes
-    self.resblock_dilation_sizes = resblock_dilation_sizes
-    self.upsample_rates = upsample_rates
-    self.upsample_initial_channel = upsample_initial_channel
-    self.upsample_kernel_sizes = upsample_kernel_sizes
-    self.segment_size = segment_size
-    self.gin_channels = gin_channels
-    self.ssl_dim = ssl_dim
-    self.emb_g = nn.Embedding(n_speakers, gin_channels)
+        self.enc_p_ = TextEncoder(ssl_dim, inter_channels, hidden_channels, 5, 1, 16, 0, filter_channels, n_heads, p_dropout)
+        hps = {
+            "sampling_rate": 48000,
+            "inter_channels": 192,
+            "resblock": "1",
+            "resblock_kernel_sizes": [3, 7, 11],
+            "resblock_dilation_sizes": [[1, 3, 5], [1, 3, 5], [1, 3, 5]],
+            "upsample_rates": [10, 8, 2, 2],
+            "upsample_initial_channel": 512,
+            "upsample_kernel_sizes": [16, 16, 4, 4],
+            "gin_channels": 256,
+        }
+        self.dec = Generator(h=hps)
+        self.enc_q = Encoder(spec_channels, inter_channels, hidden_channels, 5, 1, 16, gin_channels=gin_channels)
+        self.flow = ResidualCouplingBlock(inter_channels, hidden_channels, 5, 1, 4, gin_channels=gin_channels)
 
-    self.enc_p_ = TextEncoder(ssl_dim, inter_channels, hidden_channels, 5, 1, 16,0, filter_channels, n_heads, p_dropout)
-    hps = {
-        "sampling_rate": 48000,
-        "inter_channels": 192,
-        "resblock": "1",
-        "resblock_kernel_sizes": [3, 7, 11],
-        "resblock_dilation_sizes": [[1, 3, 5], [1, 3, 5], [1, 3, 5]],
-        "upsample_rates": [10, 8, 2, 2],
-        "upsample_initial_channel": 512,
-        "upsample_kernel_sizes": [16, 16, 4, 4],
-        "gin_channels": 256,
-    }
-    self.dec = Generator(h=hps)
-    self.enc_q = Encoder(spec_channels, inter_channels, hidden_channels, 5, 1, 16, gin_channels=gin_channels)
-    self.flow = ResidualCouplingBlock(inter_channels, hidden_channels, 5, 1, 4, gin_channels=gin_channels)
-
-  def forward(self, c, c_lengths, f0, g=None):
-    g = self.emb_g(g.unsqueeze(0)).transpose(1,2)
-    z_p, m_p, logs_p, c_mask = self.enc_p_(c.transpose(1,2), c_lengths, f0=f0_to_coarse(f0))
-    z = self.flow(z_p, c_mask, g=g, reverse=True)
-    o = self.dec(z * c_mask, g=g, f0=f0.float())
-    return o
-    
+    def forward(self, c, c_lengths, f0, g=None):
+        g = self.emb_g(g.unsqueeze(0)).transpose(1, 2)
+        z_p, m_p, logs_p, c_mask = self.enc_p_(c.transpose(1, 2), c_lengths, f0=f0_to_coarse(f0))
+        z = self.flow(z_p, c_mask, g=g, reverse=True)
+        o = self.dec(z * c_mask, g=g, f0=f0.float())
+        return o

@@ -1,27 +1,25 @@
 import hashlib
 import io
 import json
-import logging
-import os
-import time
-from pathlib import Path
-from inference import slicer
-
 import librosa
+import logging
 import numpy as np
+import os
 # import onnxruntime
 import parselmouth
 import soundfile
+import time
 import torch
 import torchaudio
+from pathlib import Path
 
 import cluster
-from hubert import hubert_model
 import utils
+from hubert import hubert_model
+from inference import slicer
 from models import SynthesizerTrn
 
 logging.getLogger('matplotlib').setLevel(logging.WARNING)
-
 
 def read_temp(file_name):
     if not os.path.exists(file_name):
@@ -45,11 +43,9 @@ def read_temp(file_name):
             data_dict = {"info": "temp_dict"}
         return data_dict
 
-
 def write_temp(file_name, data):
     with open(file_name, "w") as f:
         f.write(json.dumps(data))
-
 
 def timeit(func):
     def run(*args, **kwargs):
@@ -60,13 +56,11 @@ def timeit(func):
 
     return run
 
-
 def format_wav(audio_path):
     if Path(audio_path).suffix == '.wav':
         return
     raw_audio, raw_sample_rate = librosa.load(audio_path, mono=True, sr=None)
     soundfile.write(Path(audio_path).with_suffix(".wav"), raw_audio, raw_sample_rate)
-
 
 def get_end_file(dir_path, end):
     file_lists = []
@@ -77,7 +71,6 @@ def get_end_file(dir_path, end):
             if f_file.endswith(end):
                 file_lists.append(os.path.join(root, f_file).replace("\\", "/"))
     return file_lists
-
 
 def get_md5(content):
     return hashlib.new("md5", content).hexdigest()
@@ -102,7 +95,6 @@ def pad_array(arr, target_length):
         pad_right = pad_width - pad_left
         padded_arr = np.pad(arr, (pad_left, pad_right), 'constant', constant_values=(0, 0))
         return padded_arr
-
 
 class Svc(object):
     def __init__(self, net_g_path, config_path,
@@ -136,8 +128,6 @@ class Svc(object):
         else:
             _ = self.net_g_ms.eval().to(self.dev)
 
-
-
     def get_unit_f0(self, in_path, tran, cluster_infer_ratio, speaker):
 
         wav, sr = librosa.load(in_path, sr=self.target_sample)
@@ -155,7 +145,7 @@ class Svc(object):
         c = utils.get_hubert_content(self.hubert_model, wav_16k_tensor=wav16k)
         c = utils.repeat_expand_2d(c.squeeze(0), f0.shape[1])
 
-        if cluster_infer_ratio !=0:
+        if cluster_infer_ratio != 0:
             cluster_c = cluster.get_cluster_center_result(self.cluster_model, c.cpu().numpy().T, speaker).T
             cluster_c = torch.FloatTensor(cluster_c).to(self.dev)
             c = cluster_infer_ratio * cluster_c + (1 - cluster_infer_ratio) * c
@@ -174,12 +164,12 @@ class Svc(object):
             c = c.half()
         with torch.no_grad():
             start = time.time()
-            audio = self.net_g_ms.infer(c, f0=f0, g=sid, uv=uv, predict_f0=auto_predict_f0, noice_scale=noice_scale)[0,0].data.float()
+            audio = self.net_g_ms.infer(c, f0=f0, g=sid, uv=uv, predict_f0=auto_predict_f0, noice_scale=noice_scale)[0, 0].data.float()
             use_time = time.time() - start
             print("vits use time:{}".format(use_time))
         return audio, audio.shape[-1]
 
-    def slice_inference(self,raw_audio_path, spk, tran, slice_db,cluster_infer_ratio, auto_predict_f0,noice_scale, pad_seconds=0.5):
+    def slice_inference(self, raw_audio_path, spk, tran, slice_db, cluster_infer_ratio, auto_predict_f0, noice_scale, pad_seconds=0.5):
         wav_path = raw_audio_path
         chunks = slicer.cut(wav_path, db_thresh=slice_db)
         audio_data, audio_sr = slicer.chunks2audio(wav_path, chunks)
@@ -199,17 +189,16 @@ class Svc(object):
                 _audio = np.zeros(length)
             else:
                 out_audio, out_sr = self.infer(spk, tran, raw_path,
-                                                    cluster_infer_ratio=cluster_infer_ratio,
-                                                    auto_predict_f0=auto_predict_f0,
-                                                    noice_scale=noice_scale
-                                                    )
+                                               cluster_infer_ratio=cluster_infer_ratio,
+                                               auto_predict_f0=auto_predict_f0,
+                                               noice_scale=noice_scale
+                                               )
                 _audio = out_audio.cpu().numpy()
 
             pad_len = int(self.target_sample * pad_seconds)
             _audio = _audio[pad_len:-pad_len]
             audio.extend(list(_audio))
         return np.array(audio)
-
 
 class RealTimeVC:
     def __init__(self):

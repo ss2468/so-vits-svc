@@ -1,11 +1,10 @@
-import os
 import argparse
-import re
-
-from tqdm import tqdm
-from random import shuffle
 import json
+import os
+import re
 import wave
+from random import shuffle
+from tqdm import tqdm
 
 config_template = json.load(open("configs/config.json"))
 
@@ -28,7 +27,7 @@ if __name__ == "__main__":
     parser.add_argument("--test_list", type=str, default="./filelists/test.txt", help="path to test list")
     parser.add_argument("--source_dir", type=str, default="./dataset/44k", help="path to source dir")
     args = parser.parse_args()
-    
+
     train = []
     val = []
     test = []
@@ -58,19 +57,19 @@ if __name__ == "__main__":
     shuffle(train)
     shuffle(val)
     shuffle(test)
-            
+
     print("Writing", args.train_list)
     with open(args.train_list, "w") as f:
         for fname in tqdm(train):
             wavpath = fname
             f.write(wavpath + "\n")
-        
+
     print("Writing", args.val_list)
     with open(args.val_list, "w") as f:
         for fname in tqdm(val):
             wavpath = fname
             f.write(wavpath + "\n")
-            
+
     print("Writing", args.test_list)
     with open(args.test_list, "w") as f:
         for fname in tqdm(test):

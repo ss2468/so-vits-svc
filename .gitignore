@@ -151,3 +151,13 @@ configs/config.json
 filelists/test.txt
 filelists/train.txt
 filelists/val.txt
+
+# 文件夹
+/.idea/
+
+# 项目
+/demo/
+
+# 文件
+*.whl
+*.rar

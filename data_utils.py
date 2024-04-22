@@ -1,7 +1,7 @@
-import time
+import numpy as np
 import os
 import random
-import numpy as np
+import time
 import torch
 import torch.utils.data
 
@@ -14,7 +14,6 @@ from utils import load_wav_to_torch, load_filepaths_and_text
 
 
 """Multi speaker version"""
-
 
 class TextAudioSpeakerLoader(torch.utils.data.Dataset):
     """
@@ -64,23 +63,22 @@ class TextAudioSpeakerLoader(torch.utils.data.Dataset):
         f0 = torch.FloatTensor(f0)
         uv = torch.FloatTensor(uv)
 
-        c = torch.load(filename+ ".soft.pt")
+        c = torch.load(filename + ".soft.pt")
         c = utils.repeat_expand_2d(c.squeeze(0), f0.shape[0])
-
 
         lmin = min(c.size(-1), spec.size(-1))
         assert abs(c.size(-1) - spec.size(-1)) < 3, (c.size(-1), spec.size(-1), f0.shape, filename)
-        assert abs(audio_norm.shape[1]-lmin * self.hop_length) < 3 * self.hop_length
+        assert abs(audio_norm.shape[1] - lmin * self.hop_length) < 3 * self.hop_length
         spec, c, f0, uv = spec[:, :lmin], c[:, :lmin], f0[:lmin], uv[:lmin]
         audio_norm = audio_norm[:, :lmin * self.hop_length]
         # if spec.shape[1] < 30:
         #     print("skip too short audio:", filename)
         #     return None
         if spec.shape[1] > 800:
-            start = random.randint(0, spec.shape[1]-800)
+            start = random.randint(0, spec.shape[1] - 800)
             end = start + 790
             spec, c, f0, uv = spec[:, start:end], c[:, start:end], f0[start:end], uv[start:end]
-            audio_norm = audio_norm[:, start * self.hop_length : end * self.hop_length]
+            audio_norm = audio_norm[:, start * self.hop_length: end * self.hop_length]
 
         return c, f0, spec, audio_norm, spk, uv
 
@@ -89,7 +87,6 @@ class TextAudioSpeakerLoader(torch.utils.data.Dataset):
 
     def __len__(self):
         return len(self.audiopaths)
-
 
 class TextAudioCollate:
 

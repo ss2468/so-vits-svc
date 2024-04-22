@@ -1,22 +1,23 @@
 import hashlib
-import json
-import logging
-import os
-import time
-from pathlib import Path
 import io
+import json
 import librosa
+import logging
 import maad
 import numpy as np
-from inference import slicer
+import os
 import parselmouth
 import soundfile
+import time
 import torch
 import torchaudio
+from pathlib import Path
 
-from hubert import hubert_model
 import utils
+from hubert import hubert_model
+from inference import slicer
 from models import SynthesizerTrn
+
 logging.getLogger('numba').setLevel(logging.WARNING)
 logging.getLogger('matplotlib').setLevel(logging.WARNING)
 
@@ -28,8 +29,7 @@ def resize2d_f0(x, target_len):
     res = np.nan_to_num(target)
     return res
 
-def get_f0(x, p_len,f0_up_key=0):
-
+def get_f0(x, p_len, f0_up_key=0):
     time_step = 160 / 16000 * 1000
     f0_min = 50
     f0_max = 1100
@@ -40,9 +40,9 @@ def get_f0(x, p_len,f0_up_key=0):
         time_step=time_step / 1000, voicing_threshold=0.6,
         pitch_floor=f0_min, pitch_ceiling=f0_max).selected_array['frequency']
 
-    pad_size=(p_len - len(f0) + 1) // 2
-    if(pad_size>0 or p_len - len(f0) - pad_size>0):
-        f0 = np.pad(f0,[[pad_size,p_len - len(f0) - pad_size]], mode='constant')
+    pad_size = (p_len - len(f0) + 1) // 2
+    if pad_size > 0 or p_len - len(f0) - pad_size > 0:
+        f0 = np.pad(f0, [[pad_size, p_len - len(f0) - pad_size]], mode='constant')
 
     f0 *= pow(2, f0_up_key / 12)
     f0_mel = 1127 * np.log(1 + f0 / 700)
@@ -58,29 +58,24 @@ def clean_pitch(input_pitch):
         input_pitch[input_pitch != 1] = 1
     return input_pitch
 
-
 def plt_pitch(input_pitch):
     input_pitch = input_pitch.astype(float)
     input_pitch[input_pitch == 1] = np.nan
     return input_pitch
 
-
 def f0_to_pitch(ff):
     f0_pitch = 69 + 12 * np.log2(ff / 440)
     return f0_pitch
-
 
 def fill_a_to_b(a, b):
     if len(a) < len(b):
         for _ in range(0, len(b) - len(a)):
             a.append(a[0])
 
-
 def mkdir(paths: list):
     for path in paths:
         if not os.path.exists(path):
             os.mkdir(path)
-
 
 class VitsSvc(object):
     def __init__(self):
@@ -112,14 +107,13 @@ class VitsSvc(object):
             units = self.hubert_soft.units(source)
             return units
 
-
     def get_unit_pitch(self, in_path, tran):
         source, sr = torchaudio.load(in_path)
         source = torchaudio.functional.resample(source, sr, 16000)
         if len(source.shape) == 2 and source.shape[1] >= 2:
             source = torch.mean(source, dim=0).unsqueeze(0)
         soft = self.get_units(source, sr).squeeze(0).cpu().numpy()
-        f0_coarse, f0 = get_f0(source.cpu().numpy()[0], soft.shape[0]*2, tran)
+        f0_coarse, f0 = get_f0(source.cpu().numpy()[0], soft.shape[0] * 2, tran)
         return soft, f0
 
     def infer(self, speaker_id, tran, raw_path):
@@ -131,10 +125,10 @@ class VitsSvc(object):
         with torch.no_grad():
             x_tst = stn_tst.unsqueeze(0).to(self.device)
             x_tst = torch.repeat_interleave(x_tst, repeats=2, dim=1).transpose(1, 2)
-            audio = self.SVCVITS.infer(x_tst, f0=f0, g=sid)[0,0].data.float()
+            audio = self.SVCVITS.infer(x_tst, f0=f0, g=sid)[0, 0].data.float()
         return audio, audio.shape[-1]
 
-    def inference(self,srcaudio,chara,tran,slice_db):
+    def inference(self, srcaudio, chara, tran, slice_db):
         sampling_rate, audio = srcaudio
         audio = (audio / np.iinfo(audio.dtype).max).astype(np.float32)
         if len(audio.shape) > 1:
@@ -157,4 +151,4 @@ class VitsSvc(object):
                 _audio = out_audio.cpu().numpy()
             audio.extend(list(_audio))
         audio = (np.array(audio) * 32768.0).astype('int16')
-        return (self.hps.data.sampling_rate,audio)
+        return self.hps.data.sampling_rate, audio

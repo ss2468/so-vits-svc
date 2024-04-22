@@ -1,8 +1,9 @@
 import torch
-from torchaudio.models.wav2vec2.utils import import_fairseq_model
 from fairseq import checkpoint_utils
-from onnxexport.model_onnx import SynthesizerTrn
+from torchaudio.models.wav2vec2.utils import import_fairseq_model
+
 import utils
+from onnxexport.model_onnx import SynthesizerTrn
 
 def get_hubert_model():
     vec_path = "hubert/checkpoint_best_legacy_500.pt"
@@ -14,7 +15,6 @@ def get_hubert_model():
     model = models[0]
     model.eval()
     return model
-
 
 def main(HubertExport, NetExport):
     path = "SoVits4.0"
@@ -88,7 +88,6 @@ def main(HubertExport, NetExport):
                           verbose=False,
                           input_names=input_names,
                           output_names=output_names)
-
 
 if __name__ == '__main__':
     main(False, True)

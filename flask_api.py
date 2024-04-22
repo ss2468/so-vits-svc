@@ -1,6 +1,5 @@
 import io
 import logging
-
 import soundfile
 import torch
 import torchaudio
@@ -14,7 +13,6 @@ app = Flask(__name__)
 CORS(app)
 
 logging.getLogger('numba').setLevel(logging.WARNING)
-
 
 @app.route("/voiceChangeModel", methods=["POST"])
 def voice_change_model():
@@ -40,7 +38,6 @@ def voice_change_model():
     soundfile.write(out_wav_path, tar_audio.cpu().numpy(), daw_sample, format="wav")
     out_wav_path.seek(0)
     return send_file(out_wav_path, download_name="temp.wav", as_attachment=True)
-
 
 if __name__ == '__main__':
     # 启用则为直接切片合成，False为交叉淡化方式

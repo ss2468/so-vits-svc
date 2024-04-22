@@ -1,19 +1,16 @@
 import torch
 from torch import nn
+from torch.nn import Conv1d, ConvTranspose1d, AvgPool1d, Conv2d
 from torch.nn import functional as F
+from torch.nn.utils import weight_norm, remove_weight_norm, spectral_norm
 
 import modules.attentions as attentions
 import modules.commons as commons
 import modules.modules as modules
-
-from torch.nn import Conv1d, ConvTranspose1d, AvgPool1d, Conv2d
-from torch.nn.utils import weight_norm, remove_weight_norm, spectral_norm
-
 import utils
 from modules.commons import init_weights, get_padding
-from vdecoder.hifigan.models import Generator
 from utils import f0_to_coarse
-
+from vdecoder.hifigan.models import Generator
 
 class ResidualCouplingBlock(nn.Module):
     def __init__(self,
@@ -49,7 +46,6 @@ class ResidualCouplingBlock(nn.Module):
                 x = flow(x, x_mask, g=g, reverse=reverse)
         return x
 
-
 class Encoder(nn.Module):
     def __init__(self,
                  in_channels,
@@ -81,7 +77,6 @@ class Encoder(nn.Module):
         m, logs = torch.split(stats, self.out_channels, dim=1)
         z = (m + torch.randn_like(m) * torch.exp(logs)) * x_mask
         return z, m, logs, x_mask
-
 
 class TextEncoder(nn.Module):
     def __init__(self,
@@ -117,7 +112,6 @@ class TextEncoder(nn.Module):
         m, logs = torch.split(stats, self.out_channels, dim=1)
         z = (m + z * torch.exp(logs)) * x_mask
         return z, m, logs, x_mask
-
 
 class DiscriminatorP(torch.nn.Module):
     def __init__(self, period, kernel_size=5, stride=3, use_spectral_norm=False):
@@ -155,7 +149,6 @@ class DiscriminatorP(torch.nn.Module):
 
         return x, fmap
 
-
 class DiscriminatorS(torch.nn.Module):
     def __init__(self, use_spectral_norm=False):
         super(DiscriminatorS, self).__init__()
@@ -182,7 +175,6 @@ class DiscriminatorS(torch.nn.Module):
         x = torch.flatten(x, 1, -1)
 
         return x, fmap
-
 
 class F0Decoder(nn.Module):
     def __init__(self,
@@ -225,7 +217,6 @@ class F0Decoder(nn.Module):
         x = self.decoder(x * x_mask, x_mask)
         x = self.proj(x) * x_mask
         return x
-
 
 class SynthesizerTrn(nn.Module):
     """
@@ -312,7 +303,6 @@ class SynthesizerTrn(nn.Module):
         self.predict_f0 = False
 
     def forward(self, c, f0, mel2ph, uv, noise=None, g=None):
-
         decoder_inp = F.pad(c, [0, 0, 1, 0])
         mel2ph_ = mel2ph.unsqueeze(2).repeat([1, 1, c.shape[-1]])
         c = torch.gather(decoder_inp, 1, mel2ph_).transpose(1, 2)  # [B, T, H]

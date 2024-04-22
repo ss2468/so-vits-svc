@@ -1,11 +1,10 @@
-import os
 import argparse
 import librosa
 import numpy as np
+import os
 from multiprocessing import Pool, cpu_count
 from scipy.io import wavfile
 from tqdm import tqdm
-
 
 def process(item):
     spkdir, wav_name, args = item
@@ -29,15 +28,13 @@ def process(item):
             (wav2 * np.iinfo(np.int16).max).astype(np.int16)
         )
 
-
-
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--sr2", type=int, default=44100, help="sampling rate")
     parser.add_argument("--in_dir", type=str, default="./dataset_raw", help="path to source dir")
     parser.add_argument("--out_dir2", type=str, default="./dataset/44k", help="path to target dir")
     args = parser.parse_args()
-    processs = cpu_count()-2 if cpu_count() >4 else 1
+    processs = cpu_count() - 2 if cpu_count() > 4 else 1
     pool = Pool(processes=processs)
 
     for speaker in os.listdir(args.in_dir):

@@ -1,13 +1,13 @@
-import io
-import os
-
 # os.system("wget -P cvec/ https://huggingface.co/spaces/innnky/nanami/resolve/main/checkpoint_best_legacy_500.pt")
 import gradio as gr
+import io
 import librosa
-import numpy as np
-import soundfile
-from inference.infer_tool import Svc
 import logging
+import numpy as np
+import os
+import soundfile
+
+from inference.infer_tool import Svc
 
 logging.getLogger('numba').setLevel(logging.WARNING)
 logging.getLogger('markdown_it').setLevel(logging.WARNING)
@@ -18,9 +18,7 @@ config_path = "configs/config.json"
 
 model = Svc("logs/44k/G_114400.pth", "configs/config.json", cluster_model_path="logs/44k/kmeans_10000.pt")
 
-
-
-def vc_fn(sid, input_audio, vc_transform, auto_f0,cluster_ratio, slice_db, noise_scale):
+def vc_fn(sid, input_audio, vc_transform, auto_f0, cluster_ratio, slice_db, noise_scale):
     if input_audio is None:
         return "You need to upload an audio", None
     sampling_rate, audio = input_audio
@@ -36,10 +34,9 @@ def vc_fn(sid, input_audio, vc_transform, auto_f0,cluster_ratio, slice_db, noise
     print(audio.shape)
     out_wav_path = "temp.wav"
     soundfile.write(out_wav_path, audio, 16000, format="wav")
-    print( cluster_ratio, auto_f0, noise_scale)
+    print(cluster_ratio, auto_f0, noise_scale)
     _audio = model.slice_inference(out_wav_path, sid, vc_transform, slice_db, cluster_ratio, auto_f0, noise_scale)
     return "Success", (44100, _audio)
-
 
 app = gr.Blocks()
 with app:
@@ -61,9 +58,6 @@ with app:
             vc_submit = gr.Button("转换", variant="primary")
             vc_output1 = gr.Textbox(label="Output Message")
             vc_output2 = gr.Audio(label="Output Audio")
-        vc_submit.click(vc_fn, [sid, vc_input3, vc_transform,auto_f0,cluster_ratio, slice_db, noise_scale], [vc_output1, vc_output2])
+        vc_submit.click(vc_fn, [sid, vc_input3, vc_transform, auto_f0, cluster_ratio, slice_db, noise_scale], [vc_output1, vc_output2])
 
     app.launch()
-
-
-

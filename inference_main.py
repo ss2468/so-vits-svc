@@ -1,12 +1,11 @@
 import io
-import logging
-import time
-from pathlib import Path
-
 import librosa
+import logging
 import matplotlib.pyplot as plt
 import numpy as np
 import soundfile
+import time
+from pathlib import Path
 
 from inference import infer_tool
 from inference import slicer
@@ -15,23 +14,31 @@ from inference.infer_tool import Svc
 logging.getLogger('numba').setLevel(logging.WARNING)
 chunks_dict = infer_tool.read_temp("inference/chunks_temp.json")
 
-
-
 def main():
     import argparse
 
     parser = argparse.ArgumentParser(description='sovits4 inference')
 
     # 一定要设置的部分
-    parser.add_argument('-m', '--model_path', type=str, default="logs/44k/G_0.pth", help='模型路径')
+    parser.add_argument('-m', '--model_path', type=str, default="logs/44k/G_11200.pth", help='模型路径')
     parser.add_argument('-c', '--config_path', type=str, default="configs/config.json", help='配置文件路径')
-    parser.add_argument('-n', '--clean_names', type=str, nargs='+', default=["君の知らない物語-src.wav"], help='wav文件名列表，放在raw文件夹下')
     parser.add_argument('-t', '--trans', type=int, nargs='+', default=[0], help='音高调整，支持正负（半音）')
-    parser.add_argument('-s', '--spk_list', type=str, nargs='+', default=['nen'], help='合成目标说话人名称')
+
+    import os
+
+    # fixme 修改原音频
+    dir = "C:/Users/Administrator/UntitledProjects/so-vits-svc/raw"
+    files = [
+        i for i in os.listdir(dir)
+        if os.path.isfile(os.path.join(dir, i)) and i.endswith(".wav")
+    ]
+
+    # 修改
+    parser.add_argument('-n', '--clean_names', type=str, nargs='+', default=files, help='wav文件名列表，放在raw文件夹下')
+    parser.add_argument('-s', '--spk_list', type=str, nargs='+', default=['時坂玲人'], help='合成目标说话人名称')
 
     # 可选项部分
-    parser.add_argument('-a', '--auto_predict_f0', action='store_true', default=False,
-                        help='语音转换自动预测音高，转换歌声时不要打开这个会严重跑调')
+    parser.add_argument('-a', '--auto_predict_f0', action='store_true', default=False, help='语音转换自动预测音高，转换歌声时不要打开这个会严重跑调')
     parser.add_argument('-cm', '--cluster_model_path', type=str, default="logs/44k/kmeans_10000.pt", help='聚类模型路径，如果没有训练聚类则随便填')
     parser.add_argument('-cr', '--cluster_infer_ratio', type=float, default=0, help='聚类方案占比，范围0-1，若没有训练聚类模型则填0即可')
 
@@ -40,7 +47,8 @@ def main():
     parser.add_argument('-d', '--device', type=str, default=None, help='推理设备，None则为自动选择cpu和gpu')
     parser.add_argument('-ns', '--noice_scale', type=float, default=0.4, help='噪音级别，会影响咬字和音质，较为玄学')
     parser.add_argument('-p', '--pad_seconds', type=float, default=0.5, help='推理音频pad秒数，由于未知原因开头结尾会有异响，pad一小段静音段后就不会出现')
-    parser.add_argument('-wf', '--wav_format', type=str, default='flac', help='音频输出格式')
+    # parser.add_argument('-wf', '--wav_format', type=str, default='flac', help='音频输出格式')
+    parser.add_argument('-wf', '--wav_format', type=str, default='ogg', help='音频输出格式')
 
     args = parser.parse_args()
 
@@ -82,11 +90,7 @@ def main():
                     raw_path = io.BytesIO()
                     soundfile.write(raw_path, data, audio_sr, format="wav")
                     raw_path.seek(0)
-                    out_audio, out_sr = svc_model.infer(spk, tran, raw_path,
-                                                        cluster_infer_ratio=cluster_infer_ratio,
-                                                        auto_predict_f0=auto_predict_f0,
-                                                        noice_scale=noice_scale
-                                                        )
+                    out_audio, out_sr = svc_model.infer(spk, tran, raw_path, cluster_infer_ratio=cluster_infer_ratio, auto_predict_f0=auto_predict_f0, noice_scale=noice_scale)
                     _audio = out_audio.cpu().numpy()
                     pad_len = int(svc_model.target_sample * pad_seconds)
                     _audio = _audio[pad_len:-pad_len]
@@ -96,6 +100,8 @@ def main():
             cluster_name = "" if cluster_infer_ratio == 0 else f"_{cluster_infer_ratio}"
             res_path = f'./results/{clean_name}_{key}_{spk}{cluster_name}.{wav_format}'
             soundfile.write(res_path, audio, svc_model.target_sample, format=wav_format)
+        # 删除
+        # os.remove("C:/Users/Administrator/UntitledProjects/so-vits-svc/raw/" + clean_name)
 
 if __name__ == '__main__':
     main()

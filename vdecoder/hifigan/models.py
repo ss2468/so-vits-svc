@@ -1,16 +1,16 @@
-import os
 import json
-from .env import AttrDict
 import numpy as np
+import os
 import torch
-import torch.nn.functional as F
 import torch.nn as nn
+import torch.nn.functional as F
 from torch.nn import Conv1d, ConvTranspose1d, AvgPool1d, Conv2d
 from torch.nn.utils import weight_norm, remove_weight_norm, spectral_norm
+
+from .env import AttrDict
 from .utils import init_weights, get_padding
 
 LRELU_SLOPE = 0.1
-
 
 def load_model(model_path, device='cuda'):
     config_file = os.path.join(os.path.split(model_path)[0], 'config.json')
@@ -29,7 +29,6 @@ def load_model(model_path, device='cuda'):
     generator.remove_weight_norm()
     del cp_dict
     return generator, h
-
 
 class ResBlock1(torch.nn.Module):
     def __init__(self, h, channels, kernel_size=3, dilation=(1, 3, 5)):
@@ -70,7 +69,6 @@ class ResBlock1(torch.nn.Module):
         for l in self.convs2:
             remove_weight_norm(l)
 
-
 class ResBlock2(torch.nn.Module):
     def __init__(self, h, channels, kernel_size=3, dilation=(1, 3)):
         super(ResBlock2, self).__init__()
@@ -94,9 +92,8 @@ class ResBlock2(torch.nn.Module):
         for l in self.convs:
             remove_weight_norm(l)
 
-
 def padDiff(x):
-    return F.pad(F.pad(x, (0,0,-1,1), 'constant', 0) - x, (0,0,0,-1), 'constant', 0)
+    return F.pad(F.pad(x, (0, 0, -1, 1), 'constant', 0) - x, (0, 0, 0, -1), 'constant', 0)
 
 class SineGen(torch.nn.Module):
     """ Definition of sine generator
@@ -223,7 +220,6 @@ class SineGen(torch.nn.Module):
             sine_waves = sine_waves * uv + noise
         return sine_waves, uv, noise
 
-
 class SourceModuleHnNSF(torch.nn.Module):
     """ SourceModule for hn-nsf
     SourceModule(sampling_rate, harmonic_num=0, sine_amp=0.1,
@@ -271,7 +267,6 @@ class SourceModuleHnNSF(torch.nn.Module):
         # source for noise branch, in the same shape as uv
         noise = torch.randn_like(uv) * self.sine_amp / 3
         return sine_merge, noise, uv
-
 
 class Generator(torch.nn.Module):
     def __init__(self, h):
@@ -348,7 +343,6 @@ class Generator(torch.nn.Module):
         remove_weight_norm(self.conv_pre)
         remove_weight_norm(self.conv_post)
 
-
 class DiscriminatorP(torch.nn.Module):
     def __init__(self, period, kernel_size=5, stride=3, use_spectral_norm=False):
         super(DiscriminatorP, self).__init__()
@@ -384,7 +378,6 @@ class DiscriminatorP(torch.nn.Module):
 
         return x, fmap
 
-
 class MultiPeriodDiscriminator(torch.nn.Module):
     def __init__(self, periods=None):
         super(MultiPeriodDiscriminator, self).__init__()
@@ -407,7 +400,6 @@ class MultiPeriodDiscriminator(torch.nn.Module):
             fmap_gs.append(fmap_g)
 
         return y_d_rs, y_d_gs, fmap_rs, fmap_gs
-
 
 class DiscriminatorS(torch.nn.Module):
     def __init__(self, use_spectral_norm=False):
@@ -435,7 +427,6 @@ class DiscriminatorS(torch.nn.Module):
         x = torch.flatten(x, 1, -1)
 
         return x, fmap
-
 
 class MultiScaleDiscriminator(torch.nn.Module):
     def __init__(self):
@@ -468,7 +459,6 @@ class MultiScaleDiscriminator(torch.nn.Module):
 
         return y_d_rs, y_d_gs, fmap_rs, fmap_gs
 
-
 def feature_loss(fmap_r, fmap_g):
     loss = 0
     for dr, dg in zip(fmap_r, fmap_g):
@@ -476,7 +466,6 @@ def feature_loss(fmap_r, fmap_g):
             loss += torch.mean(torch.abs(rl - gl))
 
     return loss * 2
-
 
 def discriminator_loss(disc_real_outputs, disc_generated_outputs):
     loss = 0
@@ -490,7 +479,6 @@ def discriminator_loss(disc_real_outputs, disc_generated_outputs):
         g_losses.append(g_loss.item())
 
     return loss, r_losses, g_losses
-
 
 def generator_loss(disc_outputs):
     loss = 0

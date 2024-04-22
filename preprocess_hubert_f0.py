@@ -1,15 +1,15 @@
+import argparse
+import logging
 import math
 import multiprocessing
 import os
-import argparse
-from random import shuffle
-
 import torch
 from glob import glob
+from random import shuffle
 from tqdm import tqdm
 
 import utils
-import logging
+
 logging.getLogger('numba').setLevel(logging.WARNING)
 import librosa
 import numpy as np
@@ -17,7 +17,6 @@ import numpy as np
 hps = utils.get_hparams_from_file("configs/config.json")
 sampling_rate = hps.data.sampling_rate
 hop_length = hps.data.hop_length
-
 
 def process_one(filename, hmodel):
     # print(filename)
@@ -34,7 +33,6 @@ def process_one(filename, hmodel):
         f0 = utils.compute_f0_dio(wav, sampling_rate=sampling_rate, hop_length=hop_length)
         np.save(f0_path, f0)
 
-
 def process_batch(filenames):
     print("Loading hubert for content...")
     device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -43,7 +41,6 @@ def process_batch(filenames):
     for filename in tqdm(filenames):
         process_one(filename, hmodel)
 
-
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--in_dir", type=str, default="dataset/44k", help="path to input dir")
@@ -51,7 +48,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
     filenames = glob(f'{args.in_dir}/*/*.wav', recursive=True)  # [:10]
     shuffle(filenames)
-    multiprocessing.set_start_method('spawn',force=True)
+    multiprocessing.set_start_method('spawn', force=True)
 
     num_processes = 1
     chunk_size = int(math.ceil(len(filenames) / num_processes))

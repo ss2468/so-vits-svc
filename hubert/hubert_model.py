@@ -1,12 +1,10 @@
 import copy
 import random
-from typing import Optional, Tuple
-
 import torch
 import torch.nn as nn
 import torch.nn.functional as t_func
 from torch.nn.modules.utils import consume_prefix_in_state_dict_if_present
-
+from typing import Optional, Tuple
 
 class Hubert(nn.Module):
     def __init__(self, num_label_embeddings: int = 100, mask: bool = True):
@@ -60,7 +58,6 @@ class Hubert(nn.Module):
         logits = self.logits(x)
         return logits, mask
 
-
 class HubertSoft(Hubert):
     def __init__(self):
         super().__init__()
@@ -70,7 +67,6 @@ class HubertSoft(Hubert):
         wav = t_func.pad(wav, ((400 - 320) // 2, (400 - 320) // 2))
         x, _ = self.encode(wav)
         return self.proj(x)
-
 
 class FeatureExtractor(nn.Module):
     def __init__(self):
@@ -94,7 +90,6 @@ class FeatureExtractor(nn.Module):
         x = t_func.gelu(self.conv6(x))
         return x
 
-
 class FeatureProjection(nn.Module):
     def __init__(self):
         super().__init__()
@@ -107,7 +102,6 @@ class FeatureProjection(nn.Module):
         x = self.projection(x)
         x = self.dropout(x)
         return x
-
 
 class PositionalConvEmbedding(nn.Module):
     def __init__(self):
@@ -125,7 +119,6 @@ class PositionalConvEmbedding(nn.Module):
         x = self.conv(x.transpose(1, 2))
         x = t_func.gelu(x[:, :, :-1])
         return x.transpose(1, 2)
-
 
 class TransformerEncoder(nn.Module):
     def __init__(
@@ -150,7 +143,6 @@ class TransformerEncoder(nn.Module):
                 output, src_mask=mask, src_key_padding_mask=src_key_padding_mask
             )
         return output
-
 
 def _compute_mask(
         shape: Tuple[int, int],
@@ -205,7 +197,6 @@ def _compute_mask(
     mask = mask.scatter(1, mask_idxs, True)
 
     return mask
-
 
 def hubert_soft(
         path: str,

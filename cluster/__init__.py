@@ -20,10 +20,10 @@ def get_cluster_result(model, x, speaker):
     """
     return model[speaker].predict(x)
 
-def get_cluster_center_result(model, x,speaker):
+def get_cluster_center_result(model, x, speaker):
     """x: np.array [t, 256]"""
     predict = model[speaker].predict(x)
     return model[speaker].cluster_centers_[predict]
 
-def get_center(model, x,speaker):
+def get_center(model, x, speaker):
     return model[speaker].cluster_centers_[x]

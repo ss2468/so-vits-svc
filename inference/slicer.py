@@ -2,7 +2,6 @@ import librosa
 import torch
 import torchaudio
 
-
 class Slicer:
     def __init__(self,
                  sr: int,
@@ -116,7 +115,6 @@ class Slicer:
                 chunk_dict[str(i)] = chunks[i]
             return chunk_dict
 
-
 def cut(audio_path, db_thresh=-30, min_len=5000):
     audio, sr = librosa.load(audio_path, sr=None)
     slicer = Slicer(
@@ -126,7 +124,6 @@ def cut(audio_path, db_thresh=-30, min_len=5000):
     )
     chunks = slicer.slice(audio)
     return chunks
-
 
 def chunks2audio(audio_path, chunks):
     chunks = dict(chunks)
